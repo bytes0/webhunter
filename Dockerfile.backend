@@ -1,0 +1,76 @@
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    nmap \
+    dnsutils \
+    whois \
+    unzip \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go for building tools
+RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz && \
+    rm go1.21.5.linux-amd64.tar.gz
+
+# Add Go to PATH
+ENV PATH=$PATH:/usr/local/go/bin
+ENV GOPATH=/tmp/go
+
+# Create non-root user first
+RUN useradd -m -u 1000 appuser
+
+# Install security tools using Go as root, then copy to /usr/local/bin
+RUN go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest && \
+    go install -v github.com/tomnomnom/waybackurls@latest && \
+    go install -v github.com/projectdiscovery/pdtm/cmd/pdtm@latest && \
+    cp /tmp/go/bin/* /usr/local/bin/ && \
+    chmod +x /usr/local/bin/*
+
+# Install Nikto
+RUN wget https://github.com/sullo/nikto/archive/master.zip && \
+    unzip master.zip && \
+    cd nikto-master/program && \
+    cp nikto.pl /usr/local/bin/nikto && \
+    chmod +x /usr/local/bin/nikto && \
+    cd /app && \
+    rm -rf nikto-master master.zip
+
+# Copy requirements first for better caching
+COPY backend/requirements.txt .
+
+# Install Python dependencies (including sublist3r)
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall -y httpx && \
+    pip install httpx && \
+    pip install sublist3r
+
+# Copy application code
+COPY backend/ .
+
+# Set ownership to appuser for all necessary directories
+RUN chown -R appuser:appuser /app && \
+    chown -R appuser:appuser /usr/local/bin && \
+    chown -R appuser:appuser /tmp/go && \
+    mkdir -p /home/appuser/.config && \
+    chown -R appuser:appuser /home/appuser
+
+# Switch to appuser for runtime
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 
