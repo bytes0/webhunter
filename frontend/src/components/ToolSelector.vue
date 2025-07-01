@@ -5,7 +5,7 @@
       <div 
         v-for="tool in tools" 
         :key="tool.id"
-        v-memo="[tool.id, selectedTools.includes(tool.id)]"
+        v-memo="[tool.id, selectedTools.includes(tool.id), tool.available]"
         class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
       >
         <input

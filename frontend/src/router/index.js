@@ -3,7 +3,8 @@ import Dashboard from '../views/Dashboard.vue'
 import Recon from '../views/Recon.vue'
 import OSINT from '../views/OSINT.vue'
 import VulnScan from '../views/VulnScan.vue'
-import Reporting from '../views/Reporting.vue'
+import Telegram from '../views/Telegram.vue'
+import Exploitation from '../views/Exploitation.vue'
 
 const routes = [
   {
@@ -27,9 +28,14 @@ const routes = [
     component: VulnScan
   },
   {
-    path: '/reporting',
-    name: 'Reporting',
-    component: Reporting
+    path: '/exploitation',
+    name: 'Exploitation',
+    component: Exploitation
+  },
+  {
+    path: '/telegram',
+    name: 'Telegram',
+    component: Telegram
   }
 ]
 

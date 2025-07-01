@@ -1,10 +1,12 @@
-FROM python:3.11-slim
-
-# Set working directory
+# =================================================================
+# Stage 1: Base image with Python and system dependencies
+# =================================================================
+FROM python:3.11-slim as base
 WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     git \
@@ -15,62 +17,65 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Go for building tools
-RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz && \
-    rm go1.21.5.linux-amd64.tar.gz
+# =================================================================
+# Stage 2: Go Tools Builder
+# =================================================================
+FROM golang:1.24-alpine as go-tools
+WORKDIR /src
+ENV GOPATH=/go
+ENV PATH=$GOPATH/bin:$PATH
 
-# Add Go to PATH
-ENV PATH=$PATH:/usr/local/go/bin
-ENV GOPATH=/tmp/go
-
-# Create non-root user first
-RUN useradd -m -u 1000 appuser
-
-# Install security tools using Go as root, then copy to /usr/local/bin
 RUN go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest && \
     go install -v github.com/tomnomnom/waybackurls@latest && \
-    go install -v github.com/projectdiscovery/pdtm/cmd/pdtm@latest && \
-    cp /tmp/go/bin/* /usr/local/bin/ && \
-    chmod +x /usr/local/bin/*
+    go install -v github.com/projectdiscovery/pdtm/cmd/pdtm@latest
 
-# Install Nikto
-RUN wget https://github.com/sullo/nikto/archive/master.zip && \
-    unzip master.zip && \
-    cd nikto-master/program && \
-    cp nikto.pl /usr/local/bin/nikto && \
-    chmod +x /usr/local/bin/nikto && \
-    cd /app && \
-    rm -rf nikto-master master.zip
+# Clean up Go caches to reduce layer size
+RUN go clean -modcache -cache && \
+    rm -rf /root/.cache /tmp/*
 
-# Copy requirements first for better caching
-COPY backend/requirements.txt .
+# =================================================================
+# Stage 3: Python Application
+# =================================================================
+FROM base as final
+WORKDIR /app
 
-# Install Python dependencies (including sublist3r)
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip uninstall -y httpx && \
-    pip install httpx && \
-    pip install sublist3r
+# Create a non-root user
+RUN useradd -m -u 1000 appuser
 
-# Copy application code
-COPY backend/ .
+# Install exploitation tools
+RUN mkdir -p /app/tools && \
+    git clone --depth 1 https://github.com/sqlmapproject/sqlmap.git /app/tools/sqlmap-dev && \
+    ln -s /app/tools/sqlmap-dev/sqlmap.py /app/tools/sqlmap && \
+    chmod +x /app/tools/sqlmap-dev/sqlmap.py && \
+    git clone --depth 1 https://github.com/s0md3v/XSStrike.git /app/tools/xsstrike-dev && \
+    pip install --no-cache-dir -r /app/tools/xsstrike-dev/requirements.txt && \
+    ln -s /app/tools/xsstrike-dev/xsstrike.py /app/tools/xsstrike && \
+    chmod +x /app/tools/xsstrike-dev/xsstrike.py && \
+    git clone --depth 1 https://github.com/commixproject/commix.git /app/tools/commix-dev && \
+    ln -s /app/tools/commix-dev/commix.py /app/tools/commix && \
+    chmod +x /app/tools/commix-dev/commix.py
 
-# Set ownership to appuser for all necessary directories
-RUN chown -R appuser:appuser /app && \
-    chown -R appuser:appuser /usr/local/bin && \
-    chown -R appuser:appuser /tmp/go && \
-    mkdir -p /home/appuser/.config && \
-    chown -R appuser:appuser /home/appuser
+# Copy Python requirements first for dependency caching
+COPY --chown=appuser:appuser backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Switch to appuser for runtime
+# Copy compiled Go tools from the builder stage
+COPY --from=go-tools /go/bin/nuclei /usr/local/bin/
+COPY --from=go-tools /go/bin/waybackurls /usr/local/bin/
+COPY --from=go-tools /go/bin/pdtm /usr/local/bin/
+
+# Copy the rest of the application code
+COPY --chown=appuser:appuser backend/ .
+
+# Ensure app directory is owned by appuser
+RUN chown -R appuser:appuser /app
+
+# Switch to the non-root user
 USER appuser
 
-# Expose port
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 

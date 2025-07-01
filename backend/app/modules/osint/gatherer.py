@@ -9,6 +9,10 @@ import subprocess
 import json
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import time
+import os
+import re
+import tempfile
 
 
 class OSINTGatherer:
@@ -72,32 +76,49 @@ class OSINTGatherer:
         return results
     
     async def gather_wayback_urls(self, domain: str) -> List[str]:
-        """Gather URLs from Wayback Machine using waybackurls tool"""
+        """Gather URLs from Wayback Machine using waybackurls tool, streaming output and logging each line."""
         try:
-            # Run waybackurls command with timeout
+            print(f"[waybackurls] Starting waybackurls for domain: {domain}")
+            start_time = time.time()
             process = await asyncio.create_subprocess_exec(
                 "waybackurls", domain,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            
+            urls = []
+            url_regex = re.compile(r'https?://[^\s]+')
             try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)  # 2 minute timeout
-            except asyncio.TimeoutError:
-                print("waybackurls timed out after 2 minutes")
+                while True:
+                    try:
+                        line = await asyncio.wait_for(process.stdout.readline(), timeout=60)
+                    except asyncio.TimeoutError:
+                        print(f"[waybackurls] Timeout reached while reading output for domain: {domain}")
+                        process.kill()
+                        break
+                    if not line:
+                        break
+                    decoded_line = line.decode().strip()
+                    print(f"[waybackurls] {decoded_line}")
+                    if url_regex.match(decoded_line):
+                        urls.append(decoded_line)
+                        if len(urls) >= 1000:
+                            print(f"[waybackurls] Reached 1000 URLs, stopping collection.")
+                            process.kill()
+                            break
+                # Wait for process to exit (with a short timeout)
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    print(f"[waybackurls] Process did not exit cleanly, killing.")
+                    process.kill()
+            except Exception as e:
+                print(f"[waybackurls] Error while reading output: {e}")
                 process.kill()
-                return []
-            
-            if process.returncode == 0:
-                urls = stdout.decode().strip().split('\n')
-                # Filter out empty lines and limit to 1000 URLs
-                return [url for url in urls if url.strip()][:1000]
-            else:
-                print(f"waybackurls error: {stderr.decode()}")
-                return []
-                
+            duration = time.time() - start_time
+            print(f"[waybackurls] Finished waybackurls for domain: {domain} in {duration:.2f} seconds, collected {len(urls)} URLs.")
+            return urls
         except Exception as e:
-            print(f"Error running waybackurls: {e}")
+            print(f"[waybackurls] Error running waybackurls: {e}")
             return []
     
     async def run_full_gathering(self, target: str) -> Dict[str, Any]:

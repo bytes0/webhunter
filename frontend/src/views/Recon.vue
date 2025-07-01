@@ -239,9 +239,9 @@ export default {
     
     const reconTools = ref([
       {
-        id: 'sublist3r',
-        name: 'Sublist3r',
-        description: 'Subdomain enumeration tool',
+        id: 'hackertarget_api',
+        name: 'HackerTarget API',
+        description: 'Subdomain enumeration via HackerTarget API',
         available: true
       },
       {

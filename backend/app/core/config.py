@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     ]
     
     # Module settings
-    enabled_modules: List[str] = ["recon", "osint", "vulnscan", "reporting"]
+    enabled_modules: List[str] = ["recon", "osint", "vulnscan", "exploitation", "reporting"]
     
     class Config:
         env_file = ".env"

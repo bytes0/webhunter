@@ -39,11 +39,18 @@
                 Vulnerability Scan
               </router-link>
               <router-link
-                to="/reporting"
+                to="/exploitation"
                 class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 active-class="border-primary-500 text-gray-900"
               >
-                Reporting
+                💉 Exploitation
+              </router-link>
+              <router-link
+                to="/telegram"
+                class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                active-class="border-primary-500 text-gray-900"
+              >
+                📱 Telegram
               </router-link>
             </div>
           </div>

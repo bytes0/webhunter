@@ -8,6 +8,7 @@ from app.modules.recon.scanner import ReconScanner
 from app.core.database import get_db, Scan, Subdomain, Port, Technology, SessionLocal
 from sqlalchemy.orm import Session
 import asyncio
+from app.api.v1.endpoints.telegram import send_scan_notification
 
 router = APIRouter()
 scanner = ReconScanner()
@@ -47,6 +48,20 @@ def run_scan_background_sync(scan_id: str, target: str, tools: Optional[List[str
     try:
         logger.info(f"Starting background scan for {scan_id}")
         
+        # Send Telegram notification for scan start
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(send_scan_notification(
+                "recon", 
+                "scan_started", 
+                f"🚀 Recon scan started for {target}",
+                target
+            ))
+            loop.close()
+        except Exception as e:
+            logger.error(f"Failed to send Telegram notification for scan start: {e}")
+        
         # Create a new database session for this background task
         db = SessionLocal()
         try:
@@ -56,14 +71,25 @@ def run_scan_background_sync(scan_id: str, target: str, tools: Optional[List[str
                 setattr(scan, 'status', "running")
                 setattr(scan, 'progress', 10.0)
                 db.commit()
+                logger.info(f"Scan {scan_id} status updated to running")
             
             # Run the actual scan (this is async, so we need to handle it)
             # For now, let's create a simple event loop for this
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                if tools:
+                if tools and "hackertarget_api" in tools:
+                    # For HackerTarget API, we'll run it with progress updates
+                    logger.info(f"Running HackerTarget API for {target}")
                     results = loop.run_until_complete(scanner.run_selected_tools(target, tools))
+                    
+                    # Update progress as we get results
+                    if results.get("subdomains"):
+                        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+                        if scan:
+                            setattr(scan, 'progress', 50.0)  # 50% when subdomains found
+                            db.commit()
+                            logger.info(f"Scan {scan_id} progress updated to 50% - found {len(results.get('subdomains', []))} subdomains")
                 else:
                     results = loop.run_until_complete(scanner.run_full_scan(target))
             finally:
@@ -81,7 +107,7 @@ def run_scan_background_sync(scan_id: str, target: str, tools: Optional[List[str
                     subdomain = Subdomain(
                         scan_id=scan_id,
                         subdomain=subdomain_data["subdomain"],
-                        source=subdomain_data.get("source", "sublist3r"),
+                        source=subdomain_data.get("source", "hackertarget_api"),
                         discovered_at=datetime.utcnow()
                     )
                     db.add(subdomain)
@@ -110,8 +136,31 @@ def run_scan_background_sync(scan_id: str, target: str, tools: Optional[List[str
                     db.add(technology)
                 
                 db.commit()
-            
-            logger.info(f"Scan {scan_id} completed with {len(results.get('subdomains', []))} subdomains found")
+                logger.info(f"Scan {scan_id} completed with {len(results.get('subdomains', []))} subdomains found")
+                
+                # Send Telegram notification for scan completion
+                try:
+                    subdomain_count = len(results.get('subdomains', []))
+                    port_count = len(results.get('ports', []))
+                    tech_count = len(results.get('technologies', []))
+                    
+                    message = f"✅ Recon scan completed for {target}\n"
+                    message += f"📊 Results:\n"
+                    message += f"• Subdomains: {subdomain_count}\n"
+                    message += f"• Open ports: {port_count}\n"
+                    message += f"• Technologies: {tech_count}"
+                    
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(send_scan_notification(
+                        "recon", 
+                        "scan_completed", 
+                        message,
+                        target
+                    ))
+                    loop.close()
+                except Exception as e:
+                    logger.error(f"Failed to send Telegram notification for scan completion: {e}")
             
         except Exception as e:
             # Update database with error
@@ -123,6 +172,20 @@ def run_scan_background_sync(scan_id: str, target: str, tools: Optional[List[str
                 db.commit()
             
             logger.error(f"Error during scan {scan_id}: {str(e)}")
+            
+            # Send Telegram notification for scan failure
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(send_scan_notification(
+                    "recon", 
+                    "scan_failed", 
+                    f"❌ Recon scan failed for {target}\nError: {str(e)}",
+                    target
+                ))
+                loop.close()
+            except Exception as telegram_error:
+                logger.error(f"Failed to send Telegram notification for scan failure: {telegram_error}")
         finally:
             db.close()
             
@@ -395,9 +458,9 @@ async def list_recon_tools() -> Dict[str, Any]:
     return {
         "tools": [
             {
-                "name": "sublist3r",
-                "description": "Subdomain discovery tool",
-                "enabled": scanner.available_tools["sublist3r"]
+                "name": "hackertarget_api",
+                "description": "Subdomain discovery via HackerTarget API",
+                "enabled": True  # API is always available
             },
             {
                 "name": "nmap",
@@ -407,7 +470,7 @@ async def list_recon_tools() -> Dict[str, Any]:
             {
                 "name": "nuclei",
                 "description": "Vulnerability scanner",
-                "enabled": scanner.available_tools["nuclei"]
+                "enabled": scanner.available_tools.get("nuclei", False)
             }
         ]
     }

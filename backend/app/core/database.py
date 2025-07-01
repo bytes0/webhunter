@@ -27,6 +27,7 @@ class Scan(Base):
     completed_at = Column(DateTime, nullable=True)
     error = Column(Text, nullable=True)
     scan_type = Column(String(50), default="recon")
+    results = Column(JSON, nullable=True)
     
     # Relationships
     subdomains = relationship("Subdomain", back_populates="scan", cascade="all, delete-orphan")

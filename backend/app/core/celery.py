@@ -7,10 +7,7 @@ celery_app = Celery(
     broker=settings.redis_url,
     backend=settings.redis_url,
     include=[
-        "app.modules.recon.tasks",
-        "app.modules.osint.tasks", 
-        "app.modules.vulnscan.tasks",
-        "app.modules.reporting.tasks"
+        "app.modules.recon.tasks"
     ]
 )
 
@@ -31,7 +28,4 @@ celery_app.conf.update(
 # Optional: Configure task routes
 celery_app.conf.task_routes = {
     "app.modules.recon.tasks.*": {"queue": "recon"},
-    "app.modules.osint.tasks.*": {"queue": "osint"},
-    "app.modules.vulnscan.tasks.*": {"queue": "vulnscan"},
-    "app.modules.reporting.tasks.*": {"queue": "reporting"},
 } 

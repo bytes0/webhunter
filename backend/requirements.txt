@@ -18,4 +18,5 @@ pytest==7.4.3
 pytest-asyncio==0.21.1
 aiohttp==3.9.1
 dnspython==2.4.2
-python-whois==0.8.0 
+python-whois==0.8.0
+flower 

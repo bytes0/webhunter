@@ -29,6 +29,12 @@ async def list_modules() -> Dict[str, Any]:
             "endpoints": ["/api/v1/vulnscan/scan", "/api/v1/vulnscan/results"],
             "enabled": "vulnscan" in settings.enabled_modules
         },
+        "exploitation": {
+            "name": "Exploitation",
+            "description": "Advanced exploitation tools for vulnerability testing",
+            "endpoints": ["/api/v1/exploitation/scan", "/api/v1/exploitation/tools"],
+            "enabled": "exploitation" in settings.enabled_modules
+        },
         "reporting": {
             "name": "Reporting",
             "description": "Generazione report e dashboard",
@@ -73,6 +79,14 @@ async def get_module_info(module_name: str) -> Dict[str, Any]:
             "author": "Bug Bounty Platform",
             "endpoints": ["/api/v1/vulnscan/scan", "/api/v1/vulnscan/results"],
             "enabled": "vulnscan" in settings.enabled_modules
+        },
+        "exploitation": {
+            "name": "Exploitation",
+            "description": "Advanced exploitation tools for vulnerability testing",
+            "version": "1.0.0",
+            "author": "Bug Bounty Platform",
+            "endpoints": ["/api/v1/exploitation/scan", "/api/v1/exploitation/tools"],
+            "enabled": "exploitation" in settings.enabled_modules
         },
         "reporting": {
             "name": "Reporting",

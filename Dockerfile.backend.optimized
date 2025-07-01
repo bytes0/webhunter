@@ -1,0 +1,103 @@
+# Multi-stage build for faster builds
+FROM python:3.11-slim as base
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies in a single layer
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    nmap \
+    dnsutils \
+    whois \
+    unzip \
+    ca-certificates \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Install Go and set environment variables
+RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz && \
+    rm go1.21.5.linux-amd64.tar.gz && \
+    echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile && \
+    echo 'export GOPATH=/tmp/go' >> /etc/profile
+
+# Add Go to PATH
+ENV PATH=$PATH:/usr/local/go/bin
+ENV GOPATH=/tmp/go
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+
+# Stage 1: Install Go tools
+FROM base as go-tools
+RUN go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest && \
+    go install -v github.com/tomnomnom/waybackurls@latest && \
+    go install -v github.com/projectdiscovery/pdtm/cmd/pdtm@latest && \
+    cp /tmp/go/bin/* /usr/local/bin/ && \
+    chmod +x /usr/local/bin/*
+
+# Stage 2: Install security tools
+FROM go-tools as security-tools
+RUN wget https://github.com/sullo/nikto/archive/master.zip && \
+    unzip master.zip && \
+    cd nikto-master/program && \
+    cp nikto.pl /usr/local/bin/nikto && \
+    chmod +x /usr/local/bin/nikto && \
+    cd /app && \
+    rm -rf nikto-master master.zip
+
+# Stage 3: Install exploitation tools
+FROM security-tools as exploitation-tools
+RUN git clone https://github.com/sqlmapproject/sqlmap.git /opt/sqlmap && \
+    ln -s /opt/sqlmap/sqlmap.py /usr/local/bin/sqlmap && \
+    chmod +x /usr/local/bin/sqlmap && \
+    git clone https://github.com/s0md3v/XSStrike.git /opt/xsstrike && \
+    cd /opt/xsstrike && \
+    pip3 install -r requirements.txt && \
+    ln -s /opt/xsstrike/xsstrike.py /usr/local/bin/xsstrike && \
+    chmod +x /usr/local/bin/xsstrike && \
+    cd /app && \
+    git clone https://github.com/commixproject/commix.git /opt/commix && \
+    ln -s /opt/commix/commix.py /usr/local/bin/commix && \
+    chmod +x /usr/local/bin/commix
+
+# Stage 4: Install Python dependencies
+FROM exploitation-tools as python-deps
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall -y httpx && \
+    pip install httpx && \
+    # pip install sublist3r
+
+# Final stage: Application
+FROM python-deps as app
+# Copy application code
+COPY backend/ .
+
+# Set ownership to appuser for all necessary directories in a single layer
+RUN chown -R appuser:appuser /app && \
+    chown -R appuser:appuser /usr/local/bin && \
+    chown -R appuser:appuser /tmp/go && \
+    chown -R appuser:appuser /opt/sqlmap && \
+    chown -R appuser:appuser /opt/xsstrike && \
+    chown -R appuser:appuser /opt/commix && \
+    mkdir -p /home/appuser/.config && \
+    chown -R appuser:appuser /home/appuser
+
+# Switch to appuser for runtime
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 

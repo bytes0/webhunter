@@ -8,6 +8,9 @@ from app.modules.osint.gatherer import OSINTGatherer
 from app.core.database import get_db, Scan, WhoisRecord, DnsRecord, WaybackUrl, SessionLocal
 from sqlalchemy.orm import Session
 import asyncio
+from app.api.v1.endpoints.telegram import send_scan_notification
+import json
+import os
 
 router = APIRouter()
 
@@ -34,6 +37,20 @@ def run_osint_gathering_background(scan_id: str, target: str, tools: List[str]):
     """Run OSINT gathering in background and update database"""
     try:
         logger.info(f"Starting background OSINT gathering for {scan_id}")
+        
+        # Send Telegram notification for scan start
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(send_scan_notification(
+                "osint", 
+                "scan_started", 
+                f"🔍 OSINT gathering started for {target}",
+                target
+            ))
+            loop.close()
+        except Exception as e:
+            logger.error(f"Failed to send Telegram notification for OSINT scan start: {e}")
         
         # Create a new database session for this background task
         db = SessionLocal()
@@ -66,7 +83,7 @@ def run_osint_gathering_background(scan_id: str, target: str, tools: List[str]):
                 setattr(scan, 'completed_at', datetime.utcnow())
                 
                 # Save WHOIS records
-                if results.get("whois") and not results["whois"].get("error"):
+                if results.get("whois") and not results["whois"].get("error"):  # type: ignore
                     whois_data = results["whois"]
                     whois_record = WhoisRecord(
                         scan_id=scan_id,
@@ -80,7 +97,7 @@ def run_osint_gathering_background(scan_id: str, target: str, tools: List[str]):
                     db.add(whois_record)
                 
                 # Save DNS records
-                if results.get("dns") and not results["dns"].get("error"):
+                if results.get("dns") and not results["dns"].get("error"):  # type: ignore
                     dns_data = results["dns"]
                     record_types = {
                         "a_records": "A",
@@ -103,7 +120,7 @@ def run_osint_gathering_background(scan_id: str, target: str, tools: List[str]):
                                 db.add(dns_record)
                 
                 # Save Wayback URLs
-                if results.get("wayback_urls"):
+                if results.get("wayback_urls"):  # type: ignore
                     for url in results["wayback_urls"][:1000]:  # Limit to 1000 URLs
                         wayback_url = WaybackUrl(
                             scan_id=scan_id,
@@ -116,6 +133,73 @@ def run_osint_gathering_background(scan_id: str, target: str, tools: List[str]):
             
             logger.info(f"OSINT gathering {scan_id} completed successfully")
             
+            # Send Telegram notification for scan completion
+            try:
+                whois_count = 1 if results.get("whois") and not results["whois"].get("error") else 0
+                dns_count = sum(len(results.get("dns", {}).get(key, [])) for key in ["a_records", "aaaa_records", "mx_records", "ns_records", "txt_records", "cname_records"])
+                wayback_count = len(results.get("wayback_urls", []))
+                
+                message = f"✅ OSINT gathering completed for {target}\n"
+                message += f"📊 Results:\n"
+                message += f"• WHOIS records: {whois_count}\n"
+                message += f"• DNS records: {dns_count}\n"
+                message += f"• Wayback URLs: {wayback_count}"
+
+                # Save full results to a JSON file
+                results_filename = f"/tmp/osint_{scan_id}_results.json"
+                with open(results_filename, "w", encoding="utf-8") as f:
+                    json.dump(results, f, indent=2)
+
+                # Write WHOIS, DNS, and Wayback URLs to separate txt files
+                whois_file = f"/tmp/osint_{scan_id}_whois.txt"
+                dns_file = f"/tmp/osint_{scan_id}_dns.txt"
+                wayback_file = f"/tmp/osint_{scan_id}_waybackurls.txt"
+
+                # WHOIS
+                whois_data = results.get("whois")
+                if whois_data and not whois_data.get("error"):
+                    with open(whois_file, "w", encoding="utf-8") as f:
+                        for k, v in whois_data.items():
+                            f.write(f"{k}: {v}\n")
+                # DNS
+                dns_data = results.get("dns")
+                if dns_data and not dns_data.get("error"):
+                    with open(dns_file, "w", encoding="utf-8") as f:
+                        for k, v in dns_data.items():
+                            f.write(f"{k}: {v}\n")
+                # Wayback URLs
+                wayback_urls = results.get("wayback_urls", [])
+                if wayback_urls:
+                    with open(wayback_file, "w", encoding="utf-8") as f:
+                        for url in wayback_urls:
+                            f.write(f"{url}\n")
+
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                # Send summary message
+                loop.run_until_complete(send_scan_notification(
+                    "osint", 
+                    "scan_completed", 
+                    message,
+                    target
+                ))
+                # Send each file if it exists and is not empty
+                for file_path in [whois_file, dns_file, wayback_file]:
+                    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                        loop.run_until_complete(send_scan_notification(
+                            "osint",
+                            "scan_completed",
+                            f"OSINT results: {os.path.basename(file_path)}",
+                            target,
+                            file_path=file_path
+                        ))
+                        os.remove(file_path)
+                # Remove the JSON file as well
+                os.remove(results_filename)
+                loop.close()
+            except Exception as e:
+                logger.error(f"Failed to send Telegram notification for OSINT scan completion: {e}")
+            
         except Exception as e:
             # Update database with error
             scan = db.query(Scan).filter(Scan.id == scan_id).first()
@@ -126,6 +210,20 @@ def run_osint_gathering_background(scan_id: str, target: str, tools: List[str]):
                 db.commit()
             
             logger.error(f"Error during OSINT gathering {scan_id}: {str(e)}")
+            
+            # Send Telegram notification for scan failure
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(send_scan_notification(
+                    "osint", 
+                    "scan_failed", 
+                    f"❌ OSINT gathering failed for {target}\nError: {str(e)}",
+                    target
+                ))
+                loop.close()
+            except Exception as telegram_error:
+                logger.error(f"Failed to send Telegram notification for OSINT scan failure: {telegram_error}")
         finally:
             db.close()
             
@@ -173,7 +271,7 @@ async def start_osint_gathering(request: OSINTGatherRequest, background_tasks: B
         task_id=scan_id,
         status="started",
         target=request.target,
-        created_at=scan.created_at,
+        created_at=scan.created_at,  # type: ignore
         estimated_duration=120  # 2 minutes
     )
 
@@ -206,7 +304,7 @@ async def get_osint_results(task_id: str, db: Session = Depends(get_db)) -> Dict
     if not scan:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    if scan.status != "completed":
+    if scan.status != "completed":  # type: ignore
         raise HTTPException(status_code=400, detail="Task not completed")
     
     # Get results from related tables
@@ -221,7 +319,7 @@ async def get_osint_results(task_id: str, db: Session = Depends(get_db)) -> Dict
     }
     
     # Add WHOIS data
-    if whois_records:
+    if whois_records:  # type: ignore
         results["whois"] = {
             "domain": whois_records.domain,
             "registrar": whois_records.registrar,
@@ -232,7 +330,7 @@ async def get_osint_results(task_id: str, db: Session = Depends(get_db)) -> Dict
         }
     
     # Add DNS data
-    if dns_records:
+    if dns_records:  # type: ignore
         dns_data = {
             "domain": scan.target,
             "a_records": [],
