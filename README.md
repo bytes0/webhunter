@@ -1,6 +1,6 @@
 # WebHunter
 
-![WebHunter Screenshot](https://imgur.com/a/9XLlSYR)
+![WebHunter Screenshot](https://i.imgur.com/4m16kF8.png)
 
 A modular full-stack platform for centralized bug bounty tooling.
 
