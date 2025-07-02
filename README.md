@@ -1,4 +1,6 @@
-# Bug Bounty Platform
+# WebHunter
+
+![WebHunter Screenshot](https://imgur.com/a/9XLlSYR)
 
 A modular full-stack platform for centralized bug bounty tooling.
 
