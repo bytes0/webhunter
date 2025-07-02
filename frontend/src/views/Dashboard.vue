@@ -3,7 +3,7 @@
     <!-- Header -->
     <div class="bg-white shadow rounded-lg p-6">
       <h1 class="text-2xl font-bold text-gray-900 mb-4">Dashboard</h1>
-      <p class="text-gray-600">Welcome to the Bug Bounty Platform. Monitor your security assessments and view reports.</p>
+      <p class="text-gray-600">Welcome to webhunter. Monitor your security assessments and view reports.</p>
     </div>
 
     <!-- Stats Cards -->

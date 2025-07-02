@@ -64,4 +64,24 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Database dumps/backups
+*.sql
+*.dump
+
+# Python
+pip-log.txt
+.python-version
+
+# Docker local override
+docker-compose.override.yml
+
+# Secrets
+secrets.*
+*.pem
+*.key
+*.crt
+
+# Backup files
+*.bak 
