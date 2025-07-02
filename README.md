@@ -1,59 +1,59 @@
 # Bug Bounty Platform
 
-Una piattaforma full-stack modulare per bug bounty toolkit centralizzata.
+A modular full-stack platform for centralized bug bounty tooling.
 
-## 🚀 Caratteristiche
+## 🚀 Features
 
-- **Backend**: FastAPI con architettura modulare
-- **Frontend**: Vue 3 con Vite
-- **Containerizzazione**: Docker + Docker Compose
-- **Moduli**: Recon, OSINT, Vulnerability Scanning, Reporting
+- **Backend**: FastAPI with modular architecture
+- **Frontend**: Vue 3 with Vite
+- **Containerization**: Docker + Docker Compose
+- **Modules**: Recon, OSINT, Vulnerability Scanning, Reporting
 
-## 📁 Struttura del Progetto
+## 📁 Project Structure
 
 ```
 bb-platform/
-├── backend/                 # API FastAPI
+├── backend/                 # FastAPI backend
 │   ├── app/
-│   │   ├── main.py         # Entry point dell'applicazione
-│   │   ├── core/           # Configurazione e database
-│   │   ├── modules/        # Moduli funzionali
-│   │   └── api/            # Endpoint API
-│   └── requirements.txt    # Dipendenze Python
-├── frontend/               # Applicazione Vue 3
+│   │   ├── main.py         # Application entry point
+│   │   ├── core/           # Config and database
+│   │   ├── modules/        # Functional modules
+│   │   └── api/            # API endpoints
+│   └── requirements.txt    # Python dependencies
+├── frontend/               # Vue 3 frontend
 │   ├── src/
 │   ├── public/
 │   └── package.json
-├── docker-compose.yml      # Orchestrazione container
-├── Dockerfile.backend      # Container backend
-└── Dockerfile.frontend     # Container frontend
+├── docker-compose.yml      # Container orchestration
+├── Dockerfile.backend      # Backend container
+└── Dockerfile.frontend     # Frontend container
 ```
 
-## 🛠️ Setup e Avvio
+## 🛠️ Setup & Usage
 
-### Con Docker (Raccomandato)
+### With Docker (Recommended)
 
 ```bash
-# Clona il repository
+# Clone the repository
 git clone <repository-url>
 cd bb-platform
 
-# Avvia tutti i servizi
+# Start all services
 docker compose up -d
 
-# Accedi all'applicazione
+# Access the application
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:8000
 # API Docs: http://localhost:8000/docs
 ```
 
-### Sviluppo Locale
+### Local Development
 
 #### Backend
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -65,30 +65,31 @@ npm install
 npm run dev
 ```
 
-## 📦 Moduli Disponibili
+## 📦 Available Modules
 
-- **Recon**: Strumenti di ricognizione e discovery
+- **Recon**: Reconnaissance and asset discovery tools
 - **OSINT**: Open Source Intelligence gathering
-- **VulnScan**: Vulnerability scanning e assessment
-- **Reporting**: Generazione report e dashboard
+- **VulnScan**: Vulnerability scanning and assessment
+- **Reporting**: Report generation and dashboard
+- **Exploitation**: Exploitation tools for testing vulnerabilities
 
-## 🔧 Sviluppo
+## 🔧 Development
 
-### Aggiungere un Nuovo Modulo
+### Adding a New Module
 
-1. Crea una nuova cartella in `backend/app/modules/`
-2. Implementa il modulo seguendo la struttura esistente
-3. Registra il modulo in `backend/app/main.py`
+1. Create a new folder in `backend/app/modules/`
+2. Implement your module following the existing structure
+3. Register the module in `backend/app/main.py`
 
 ### API Endpoints
 
 - `GET /api/v1/health` - Health check
-- `GET /api/v1/modules` - Lista moduli disponibili
-- `POST /api/v1/recon/scan` - Avvia scan di ricognizione
-- `POST /api/v1/osint/gather` - Raccolta informazioni OSINT
-- `POST /api/v1/vulnscan/scan` - Avvia vulnerability scan
-- `GET /api/v1/reporting/reports` - Lista report generati
+- `GET /api/v1/modules` - List available modules
+- `POST /api/v1/recon/scan` - Start a reconnaissance scan
+- `POST /api/v1/osint/gather` - Gather OSINT information
+- `POST /api/v1/vulnscan/scan` - Start a vulnerability scan
+- `GET /api/v1/reporting/reports` - List generated reports
 
-## 📄 Licenza
+## 📄 License
 
 MIT License 
